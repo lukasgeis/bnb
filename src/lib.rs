@@ -7,8 +7,6 @@
 //! This is a rather long example.
 //! It models the [Knapsack-Problem](https://en.wikipedia.org/wiki/Knapsack_problem) and solves it using the following [`BranchAndBound`] algorithm.
 //!
-//! ### Model
-//!
 //! A solution is a tuple (or struct) `(J,i)` where `J` is a set of indices from `1..i` which represent all the already chosen items.
 //! We bound a solution by computing its fractional optimal value using the last `i+1..n` items and the already chosen ones.
 //!
@@ -132,17 +130,17 @@
 //!
 //!     // The solution should exist
 //!     let sol = bnb.run_to_completion().cloned().unwrap();
-//! 
+//!
 //!     // Optimal value achieved us 12.3
 //!     assert_eq!(sol.0, 12.3);
-//! 
+//!
 //!     // Items 1,2,3,6,8 were chosen
 //!     assert_eq!(sol.1.chosen, vec![true, true, true, false, false, true, false, true]);
 //!     assert_eq!(sol.1.index, 8);
-//! 
+//!
 //!     // The total weight of chosen items is 1.6
 //!     assert_eq!(sol.1.total_weight, 1.6);
-//! 
+//!
 //!     // The algorithm took 21 iterations (77 for BestFirstSearch and 125 for BFS in this instance)
 //!     assert_eq!(bnb.num_iterations(), 21);
 //!
