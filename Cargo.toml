@@ -1,8 +1,12 @@
 [package]
 name = "bnb"
+description = "A generic template for Branch & Bound algorithms"
 version = "0.1.0"
 edition = "2021"
+authors = ["Lukas Geis <lukasgeis@gmx.de>"]
+license = "MIT"
+exclude = [".gitignore", "target"]
+homepage = "https://github.com/lukasgeis/bnb"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
