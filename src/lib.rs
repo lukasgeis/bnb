@@ -2,11 +2,157 @@
 //!
 //! This crate provides a general template for Branch & Bound algorithms.
 //!
+//! ## Example
+//!
+//! This is a rather long example.
+//! It models the [Knapsack-Problem](https://en.wikipedia.org/wiki/Knapsack_problem) and solves it using the following [`BranchAndBound`] algorithm.
+//!
+//! ### Model
+//!
+//! A solution is a tuple (or struct) `(J,i)` where `J` is a set of indices from `1..i` which represent all the already chosen items.
+//! We bound a solution by computing its fractional optimal value using the last `i+1..n` items and the already chosen ones.
+//!
+//! Note that we keep an immutable reference to the problem instance in the solution itself to allow to dynamic access to the values.
+//! Furthermore that this example is highly unoptimized.
+//!
+//! ```
+//! use bnb::*;
+//!
+//! #[derive(Clone, Debug)]
+//! struct KnapsackInstance {
+//!     num_items: usize,
+//!     weights: Vec<f64>,
+//!     values: Vec<f64>,
+//!     weight_limit: f64,
+//! }
+//!
+//! #[derive(Clone, Debug)]
+//! struct KnapsackSolution<'a> {
+//!     instance: &'a KnapsackInstance,
+//!     chosen: Vec<bool>,
+//!     index: usize,
+//!     total_weight: f64,
+//! }
+//!
+//! impl<'a> BranchingOperator for KnapsackSolution<'a> {
+//!     fn branch(&self) -> Vec<Self> {
+//!         if self.index == self.instance.num_items {
+//!             return vec![];
+//!         }
+//!
+//!         let mut next_not_chosen: Vec<bool> = self.chosen.clone();
+//!         next_not_chosen.push(false);
+//!         let mut branches = vec![KnapsackSolution {
+//!             instance: &self.instance,
+//!             chosen: next_not_chosen,
+//!             index: self.index + 1,
+//!             total_weight: self.total_weight,
+//!         }];
+//!
+//!         if self.total_weight + self.instance.weights[self.index] <= self.instance.weight_limit {
+//!             let mut next_chosen: Vec<bool> = self.chosen.clone();
+//!             next_chosen.push(true);
+//!             branches.push(KnapsackSolution {
+//!                 instance: &self.instance,
+//!                 chosen: next_chosen,
+//!                 index: self.index + 1,
+//!                 total_weight: self.total_weight + self.instance.weights[self.index],
+//!             });
+//!         }
+//!
+//!         branches
+//!     }
+//! }
+//!
+//! impl<'a> BoundingOperator<f64> for KnapsackSolution<'a> {
+//!     fn bound(&self) -> f64 {
+//!         let mut bound: f64 = 0.0;
+//!         for (i, b) in self.chosen.iter().enumerate() {
+//!             if *b {
+//!                 bound += self.instance.values[i];
+//!             }
+//!         }
+//!
+//!         let mut remaining_weight = self.instance.weight_limit - self.total_weight;
+//!         let mut sorted_indices: Vec<(usize, f64)> = (self.index..self.instance.num_items)
+//!             .into_iter()
+//!             .map(|i| (i, self.instance.values[i] / self.instance.weights[i]))
+//!             .collect();
+//!         sorted_indices.sort_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap());
+//!         loop {
+//!             if let Some((i, _)) = sorted_indices.pop() {
+//!                 if remaining_weight - self.instance.weights[i] < 0.0 {
+//!                      let ratio = remaining_weight as f64 / self.instance.weights[i];
+//!                     bound += ratio * self.instance.values[i];
+//!                     break;
+//!                 } else {
+//!                     remaining_weight -= self.instance.weights[i];
+//!                     bound += self.instance.values[i];
+//!                 }
+//!             } else {
+//!                 break;
+//!             }
+//!         }
+//!
+//!         bound
+//!     }
+//!
+//!     fn solution(&self) -> Option<f64> {
+//!         if self.index < self.instance.num_items {
+//!             return None;
+//!         }
+//!
+//!         let mut total_value: f64 = 0.0;
+//!         for (i, b) in self.chosen.iter().enumerate() {
+//!             if *b {
+//!                 total_value += self.instance.values[i];
+//!             }
+//!         }
+//!         Some(total_value)
+//!     }
+//! }
+//!
+//! fn main() {
+//!     let mut ins: KnapsackInstance = KnapsackInstance {
+//!         num_items: 8,
+//!         weights: vec![0.1, 0.4, 0.3, 0.7, 0.9, 0.2, 0.5, 0.6],
+//!         values: vec![2.0, 3.1, 2.4, 0.9, 5.1, 0.8, 0.2, 4.0],
+//!         weight_limit: 1.7,
+//!     };
+//!
+//!     // Run Branch & Bound using DFS
+//!     let mut bnb = BranchAndBound::new(KnapsackSolution {
+//!         instance: &ins,
+//!         chosen: vec![],
+//!         index: 0,
+//!         total_weight: 0.0,
+//!     })
+//!     .maximize()
+//!     .use_dfs();
+//!
+//!     // The solution should exist
+//!     let sol = bnb.run_to_completion().cloned().unwrap();
+//! 
+//!     // Optimal value achieved us 12.3
+//!     assert_eq!(sol.0, 12.3);
+//! 
+//!     // Items 1,2,3,6,8 were chosen
+//!     assert_eq!(sol.1.chosen, vec![true, true, true, false, false, true, false, true]);
+//!     assert_eq!(sol.1.index, 8);
+//! 
+//!     // The total weight of chosen items is 1.6
+//!     assert_eq!(sol.1.total_weight, 1.6);
+//! 
+//!     // The algorithm took 21 iterations (77 for BestFirstSearch and 125 for BFS in this instance)
+//!     assert_eq!(bnb.num_iterations(), 21);
+//!
+//! }
+//!
+//! ```
 
-use std::{
-    cmp::{Ordering, Reverse},
-    collections::{BinaryHeap, VecDeque},
-};
+use seq::*;
+
+pub mod seq;
 
 // ------------------------------- //
 //     Branch & Bound Operators    //
@@ -43,7 +189,7 @@ pub trait BoundingOperator<V> {
     /// ## Implementation Notes
     ///
     /// In many cases, this function might boil down to
-    /// ```no_run
+    /// ```ignore
     /// fn solution(&self) -> Option<V> {
     ///     if ...self.is_final()... {
     ///         return Some(self.bound());
@@ -56,276 +202,6 @@ pub trait BoundingOperator<V> {
     /// of `self.solution()`.
     /// See the example in the main documentation.
     fn solution(&self) -> Option<V>;
-}
-
-// ------------------------------- //
-//        Node - Sequencer         //
-// ------------------------------- //
-
-/// # Push & Pop Nodes
-///
-/// This trait provides basic methods describing the functionality of a data structure
-/// storing values (nodes) of any type T in a specific sequential manner.
-/// Many of these methods are already implemented for most structures like `Vec<T>`, but
-/// are refurbished in order to use them interchangibly in the [`BranchAndBound`] algorithm.
-pub trait NodeSequencer<T>: Sized {
-    /// Initializes the sequencer with a starting object as the first element.
-    fn init(item: T) -> Self;
-
-    /// Pushes a given element onto the sequencer.
-    fn push(&mut self, item: T);
-
-    /// Pops the highest-order-priority element from the sequencer and returns it as an `Option<T>`.
-    /// Returns `None` if the sequencer was empty.
-    fn pop(&mut self) -> Option<T>;
-
-    /// Returns the number of elements in the sequencer.
-    fn len(&self) -> usize;
-
-    /// Consumes the sequencer and returns a `Vec<T>` with all remaining objects in the sequencer.
-    fn to_vec(self) -> Vec<T>;
-
-    /// Creates a sequencer from a `Vec<T>`.
-    /// Note that elements will most likely be pushed into the sequencer in the given order in the vector.
-    fn from_vec(items: Vec<T>) -> Self;
-
-    /// Consumes a foreign sequencer to create a new sequencer of this type.
-    ///
-    /// Note that this is only meant to prevent writing `Self::from_vec(other.to_vec())` everytime.
-    fn convert_from<S>(other: S) -> Self
-    where
-        S: NodeSequencer<T>,
-    {
-        Self::from_vec(other.to_vec())
-    }
-
-    /// Keeps popping elements from the sequencer until a condition is met or the sequencer is empty.
-    fn pop_until_satisfied<F>(&mut self, f: F) -> Option<T>
-    where
-        F: Fn(&T) -> bool,
-    {
-        while let Some(item) = self.pop() {
-            if f(&item) {
-                return Some(item);
-            }
-        }
-        None
-    }
-}
-
-/// # LIFO
-///
-/// This sequencer is used for the DFS (Depth-First-Search) algorithm.
-pub type Stack<T> = Vec<T>;
-
-/// # FIFO
-///
-/// This sequencer is used for the BFS (Breadth-First-Search) algorithm.
-pub type Queue<T> = VecDeque<T>;
-
-/// # Min-Heap
-///
-/// This sequencer is used for the Best-First-Algorithms in minimization problems.
-pub type PrioQueue<T> = BinaryHeap<T>;
-
-/// # Max-Heap
-///
-/// This sequencer is used for the Best-First-Algorithms in maximization problems.
-pub struct RevPrioQueue<T>(BinaryHeap<Reverse<T>>);
-
-impl<T> NodeSequencer<T> for Stack<T> {
-    fn init(item: T) -> Self {
-        vec![item]
-    }
-
-    fn push(&mut self, item: T) {
-        self.push(item)
-    }
-
-    fn pop(&mut self) -> Option<T> {
-        self.pop()
-    }
-
-    fn len(&self) -> usize {
-        self.len()
-    }
-
-    fn to_vec(self) -> Vec<T> {
-        self
-    }
-
-    fn from_vec(items: Vec<T>) -> Self {
-        items
-    }
-}
-
-impl<T> NodeSequencer<T> for Queue<T> {
-    fn init(item: T) -> Self {
-        Self::from(vec![item])
-    }
-
-    fn push(&mut self, item: T) {
-        self.push_back(item)
-    }
-
-    fn pop(&mut self) -> Option<T> {
-        self.pop_front()
-    }
-
-    fn len(&self) -> usize {
-        self.len()
-    }
-
-    fn to_vec(self) -> Vec<T> {
-        self.into()
-    }
-
-    fn from_vec(items: Vec<T>) -> Self {
-        Self::from(items)
-    }
-}
-
-impl<T> NodeSequencer<T> for PrioQueue<T>
-where
-    T: Ord,
-{
-    fn init(item: T) -> Self {
-        Self::from(vec![item])
-    }
-
-    fn push(&mut self, item: T) {
-        self.push(item)
-    }
-
-    fn pop(&mut self) -> Option<T> {
-        self.pop()
-    }
-
-    fn len(&self) -> usize {
-        self.len()
-    }
-
-    fn to_vec(self) -> Vec<T> {
-        self.into_vec()
-    }
-
-    fn from_vec(items: Vec<T>) -> Self {
-        Self::from(items)
-    }
-}
-
-impl<T> NodeSequencer<T> for RevPrioQueue<T>
-where
-    T: Ord,
-{
-    fn init(item: T) -> Self {
-        RevPrioQueue(BinaryHeap::from(vec![Reverse(item)]))
-    }
-
-    fn push(&mut self, item: T) {
-        self.0.push(Reverse(item))
-    }
-
-    fn pop(&mut self) -> Option<T> {
-        if let Some(Reverse(item)) = self.0.pop() {
-            return Some(item);
-        }
-        None
-    }
-
-    fn len(&self) -> usize {
-        self.0.len()
-    }
-
-    fn to_vec(self) -> Vec<T> {
-        self.0.into_iter().map(|Reverse(item)| item).collect()
-    }
-
-    fn from_vec(items: Vec<T>) -> Self {
-        RevPrioQueue(BinaryHeap::from(
-            items
-                .into_iter()
-                .map(|item| Reverse(item))
-                .collect::<Vec<Reverse<T>>>(),
-        ))
-    }
-}
-
-/// Struct representing a solution (or node) and its bound.
-/// This is mainly used to avoid repeatedly calling `bound()` on a solution and it allows
-/// for easier handling in [`PrioQueue`] and [`RevPrioQueue`].
-#[derive(PartialEq)]
-pub struct BoundedNode<V, B>
-where
-    V: PartialOrd + Clone,
-    B: BranchingOperator + BoundingOperator<V> + PartialEq,
-{
-    /// Bound of the solution.
-    bound: V,
-
-    /// The solution itself.
-    node: B,
-}
-
-/// When `Ord` is implemented for `V` (and `Eq` is implemented for `B`), then we can also implement `Eq` for `BoundedNode<V, B>`.
-impl<V, B> Eq for BoundedNode<V, B>
-where
-    V: Ord + Clone,
-    B: BranchingOperator + BoundingOperator<V> + Eq,
-{
-}
-
-/// When `Ord` is implemented for `V` (and `Eq` is implemented for `B`), then we can also implement `Ord` for `BoundedNode<V, B>`.
-impl<V, B> Ord for BoundedNode<V, B>
-where
-    V: Ord + Clone,
-    B: BranchingOperator + BoundingOperator<V> + Eq,
-{
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.bound.cmp(&other.bound)
-    }
-}
-
-impl<V, B> PartialOrd for BoundedNode<V, B>
-where
-    V: PartialOrd + Clone,
-    B: BranchingOperator + BoundingOperator<V> + PartialEq,
-{
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        self.bound.partial_cmp(&other.bound)
-    }
-}
-
-impl<V, B> BoundedNode<V, B>
-where
-    V: PartialOrd + Clone,
-    B: BranchingOperator + BoundingOperator<V> + PartialEq,
-{
-    /// Creates a new [`BoundedNode`] using a given bound and a given solution.
-    pub fn new(bound: V, node: B) -> Self {
-        Self {
-            bound: bound,
-            node: node,
-        }
-    }
-
-    /// Initializes a [`BoundedNode`] from a solution using the `bound()` method.
-    pub fn init(node: B) -> Self {
-        Self {
-            bound: node.bound(),
-            node: node,
-        }
-    }
-
-    /// Consumes the [`BoundedNode`] and returns the bound and the solution a s a tuple.
-    pub fn split(self) -> (V, B) {
-        (self.bound, self.node)
-    }
-
-    /// Clones the bound and returns it.
-    pub fn value(&self) -> V {
-        self.bound.clone()
-    }
 }
 
 /// Placeholder struct to identify minimization problems.
@@ -357,9 +233,9 @@ impl MinOrMax for BBMax {
 /// The main algorithm and the heart of the crate.
 pub struct BranchAndBound<V, B, S, M>
 where
-    V: PartialOrd + Clone,
-    B: BranchingOperator + BoundingOperator<V> + PartialEq,
-    S: NodeSequencer<BoundedNode<V, B>>,
+    V: PartialOrd + PartialEq + Clone,
+    B: BranchingOperator + BoundingOperator<V>,
+    S: NodeSequencer<BoundedSolution<V, B>>,
     M: MinOrMax,
 {
     /// The starting node, i.e. the set of all solutions.
@@ -373,12 +249,15 @@ where
 
     /// The goal type of the algorithm, i.e. minimization or maximization.
     goal_type: M,
+
+    /// Number of iterations performed
+    iterations: usize,
 }
 
-impl<V, B> BranchAndBound<V, B, Stack<BoundedNode<V, B>>, BBMin>
+impl<V, B> BranchAndBound<V, B, Stack<BoundedSolution<V, B>>, BBMin>
 where
-    V: PartialOrd + Clone,
-    B: BranchingOperator + BoundingOperator<V> + PartialEq + Clone,
+    V: PartialOrd + PartialEq + Clone,
+    B: BranchingOperator + BoundingOperator<V> + Clone,
 {
     /// Creates a new [`BranchAndBound`] instance using a starting node, i.e. the set of all solutions.
     ///
@@ -387,60 +266,75 @@ where
         Self {
             start_node: start_node.clone(),
             current_best_bound: None,
-            node_sequencer: Stack::init(BoundedNode::init(start_node)),
+            node_sequencer: Stack::init(BoundedSolution::init(start_node)),
             goal_type: BBMin(),
+            iterations: 0,
         }
     }
 }
 
 impl<V, B, S, M> BranchAndBound<V, B, S, M>
 where
-    V: PartialOrd + Clone,
-    B: BranchingOperator + BoundingOperator<V> + PartialEq,
-    S: NodeSequencer<BoundedNode<V, B>>,
+    V: PartialOrd + PartialEq + Clone,
+    B: BranchingOperator + BoundingOperator<V>,
+    S: NodeSequencer<BoundedSolution<V, B>>,
     M: MinOrMax,
 {
     /// Consumes itself and returns a [`BranchAndBound`] algorithm with the same parameters but a minimization goal.
     ///
     /// Note that this function is obsolete since every [`BranchAndBound`] algorithm is initialized as a minimization problem.
+    ///
+    /// ## Warning
+    /// Always call this method prior to `use_best_first_search()`!
     pub fn minimize(self) -> BranchAndBound<V, B, S, BBMin> {
+        assert!(!self.node_sequencer.is_ordered());
+
         BranchAndBound {
             start_node: self.start_node,
             current_best_bound: self.current_best_bound,
             node_sequencer: self.node_sequencer,
             goal_type: BBMin(),
+            iterations: self.iterations,
         }
     }
 
     /// Consumes itself and returns a [`BranchAndBound`] algorithm with the same parameters but a maximization goal.
+    ///
+    /// ## Warning
+    /// Always call this method prior to `use_best_first_search()`!
     pub fn maximize(self) -> BranchAndBound<V, B, S, BBMax> {
+        assert!(!self.node_sequencer.is_ordered());
+
         BranchAndBound {
             start_node: self.start_node,
             current_best_bound: self.current_best_bound,
             node_sequencer: self.node_sequencer,
             goal_type: BBMax(),
+            iterations: self.iterations,
         }
     }
 
     /// Consumes itself and returns a [`BranchAndBound`] algorithm with the same parameters but it uses DFS to determine node-order.
     ///
     /// Note that this function is obsolete since every [`BranchAndBound`] algorithm is initialized with DFS as its node-sequencer.
-    pub fn use_dfs(self) -> BranchAndBound<V, B, Stack<BoundedNode<V, B>>, M> {
+    pub fn use_dfs(self) -> BranchAndBound<V, B, Stack<BoundedSolution<V, B>>, M> {
         BranchAndBound {
             start_node: self.start_node,
             current_best_bound: self.current_best_bound,
             node_sequencer: Stack::convert_from(self.node_sequencer),
             goal_type: self.goal_type,
+            iterations: self.iterations,
         }
     }
 
     /// Consumes itself and returns a [`BranchAndBound`] algorithm with the same parameters but it uses BFS to determine node-order.
-    pub fn use_bfs(self) -> BranchAndBound<V, B, Queue<BoundedNode<V, B>>, M> {
+    pub fn use_bfs(self) -> BranchAndBound<V, B, Queue<BoundedSolution<V, B>>, M> {
         BranchAndBound {
             start_node: self.start_node,
             current_best_bound: self.current_best_bound,
             node_sequencer: Queue::convert_from(self.node_sequencer),
             goal_type: self.goal_type,
+            iterations: self.iterations,
         }
     }
 
@@ -455,44 +349,47 @@ where
             current_best_bound: Some((value, solution)),
             node_sequencer: self.node_sequencer,
             goal_type: self.goal_type,
+            iterations: self.iterations,
         }
     }
 }
 
 impl<V, B, S> BranchAndBound<V, B, S, BBMin>
 where
-    V: Ord + Clone,
-    B: BranchingOperator + BoundingOperator<V> + Eq,
-    S: NodeSequencer<BoundedNode<V, B>>,
+    V: PartialOrd + PartialEq + Clone,
+    B: BranchingOperator + BoundingOperator<V>,
+    S: NodeSequencer<BoundedSolution<V, B>>,
 {
     /// Consumes itself and returns a [`BranchAndBound`] algorithm with the same parameters but it uses Best-Fit-Search to determine node-order.
     pub fn use_best_first_search(
         self,
-    ) -> BranchAndBound<V, B, PrioQueue<BoundedNode<V, B>>, BBMin> {
+    ) -> BranchAndBound<V, B, PrioQueue<BoundedSolution<V, B>>, BBMin> {
         BranchAndBound {
             start_node: self.start_node,
             current_best_bound: self.current_best_bound,
             node_sequencer: PrioQueue::convert_from(self.node_sequencer),
             goal_type: self.goal_type,
+            iterations: self.iterations,
         }
     }
 }
 
 impl<V, B, S> BranchAndBound<V, B, S, BBMax>
 where
-    V: Ord + Clone,
-    B: BranchingOperator + BoundingOperator<V> + Eq,
-    S: NodeSequencer<BoundedNode<V, B>>,
+    V: PartialOrd + PartialEq + Clone,
+    B: BranchingOperator + BoundingOperator<V>,
+    S: NodeSequencer<BoundedSolution<V, B>>,
 {
     /// Consumes itself and returns a [`BranchAndBound`] algorithm with the same parameters but it uses Best-Fit-Search to determine node-order.
     pub fn use_best_first_search(
         self,
-    ) -> BranchAndBound<V, B, RevPrioQueue<BoundedNode<V, B>>, BBMax> {
+    ) -> BranchAndBound<V, B, RevPrioQueue<BoundedSolution<V, B>>, BBMax> {
         BranchAndBound {
             start_node: self.start_node,
             current_best_bound: self.current_best_bound,
             node_sequencer: RevPrioQueue::convert_from(self.node_sequencer),
             goal_type: self.goal_type,
+            iterations: self.iterations,
         }
     }
 }
@@ -521,18 +418,22 @@ pub trait IterativeAlgorithm {
         }
         self.best_known_solution()
     }
+
+    /// Returns the current number of iterations performed by the algorithm.
+    fn num_iterations(&self) -> usize;
 }
 
 impl<V, B, S, M> IterativeAlgorithm for BranchAndBound<V, B, S, M>
 where
-    V: PartialOrd + Clone,
-    B: BranchingOperator + BoundingOperator<V> + PartialEq,
-    S: NodeSequencer<BoundedNode<V, B>>,
+    V: PartialOrd + PartialEq + Clone,
+    B: BranchingOperator + BoundingOperator<V>,
+    S: NodeSequencer<BoundedSolution<V, B>>,
     M: MinOrMax,
 {
     type Solution = (V, B);
 
     fn execute_step(&mut self) {
+        self.iterations += 1;
         // If there is a (next) node in the sequencer that has a better theoretical bound than the currently best known solution (if existing), then...
         if let Some(node) = self.node_sequencer.pop_until_satisfied(|node| {
             if let Some((val, _)) = self.current_best_bound.as_ref() {
@@ -570,7 +471,7 @@ where
                     }
                 }
                 self.node_sequencer
-                    .push(BoundedNode::new(bound, branch_node));
+                    .push(BoundedSolution::new(bound, branch_node));
             }
         }
     }
@@ -584,5 +485,9 @@ where
             return Some(sol);
         }
         None
+    }
+
+    fn num_iterations(&self) -> usize {
+        self.iterations
     }
 }
