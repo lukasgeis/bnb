@@ -1,7 +1,7 @@
 [package]
 name = "bnb"
 description = "A generic template for Branch & Bound algorithms"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 authors = ["Lukas Geis <lukasgeis@gmx.de>"]
 license = "MIT"

@@ -14,7 +14,7 @@
 //! Furthermore that this example is highly unoptimized.
 //!
 //! ```
-//! use bnb::*;
+//! use bnb::{BranchingOperator, BoundingOperator, BranchAndBound, IterativeAlgorithm};
 //!
 //! #[derive(Clone, Debug)]
 //! struct KnapsackInstance {
@@ -30,6 +30,17 @@
 //!     chosen: Vec<bool>,
 //!     index: usize,
 //!     total_weight: f64,
+//! }
+//!
+//! impl<'a> KnapsackSolution<'a> {
+//!     pub fn new(ins: &'a KnapsackInstance) -> Self {
+//!         Self {
+//!             instance: ins,
+//!             chosen: vec![],
+//!             index: 0,
+//!             total_weight: 0.0,
+//!         }
+//!     }
 //! }
 //!
 //! impl<'a> BranchingOperator for KnapsackSolution<'a> {
@@ -111,7 +122,7 @@
 //! }
 //!
 //! fn main() {
-//!     let mut ins: KnapsackInstance = KnapsackInstance {
+//!     let ins: KnapsackInstance = KnapsackInstance {
 //!         num_items: 8,
 //!         weights: vec![0.1, 0.4, 0.3, 0.7, 0.9, 0.2, 0.5, 0.6],
 //!         values: vec![2.0, 3.1, 2.4, 0.9, 5.1, 0.8, 0.2, 4.0],
@@ -119,17 +130,15 @@
 //!     };
 //!
 //!     // Run Branch & Bound using DFS
-//!     let mut bnb = BranchAndBound::new(KnapsackSolution {
-//!         instance: &ins,
-//!         chosen: vec![],
-//!         index: 0,
-//!         total_weight: 0.0,
-//!     })
-//!     .maximize()
-//!     .use_dfs();
+//!     let mut bnb = BranchAndBound::new(KnapsackSolution::new(&ins))
+//!                     .maximize()
+//!                     .use_dfs();
+//!     
+//!     // Run the algorithm
+//!     bnb.run_to_completion();
 //!
 //!     // The solution should exist
-//!     let sol = bnb.run_to_completion().cloned().unwrap();
+//!     let sol = bnb.best_known_solution().unwrap();
 //!
 //!     // Optimal value achieved us 12.3
 //!     assert_eq!(sol.0, 12.3);
@@ -177,7 +186,10 @@ pub trait BranchingOperator: Sized {
 /// The [`BoundingOperator`] evaluates a set of solutions and provides a theoretical lower/upper bound on the achievable values of these solutions.
 /// Additionally, if a set of solutions contains exactly one solution (i.e. is a leaf node in the *solution-tree*), or is in any other way a *final*
 /// solution, it can compute the achieved value of this specific solution.
-pub trait BoundingOperator<V> {
+pub trait BoundingOperator<V>
+where
+    V: PartialOrd,
+{
     /// Computes a theoretical lower/upper bound on a set of solutions on the achievable values of these solutions.
     fn bound(&self) -> V;
 
@@ -231,7 +243,7 @@ impl MinOrMax for BBMax {
 /// The main algorithm and the heart of the crate.
 pub struct BranchAndBound<V, B, S, M>
 where
-    V: PartialOrd + PartialEq + Clone,
+    V: PartialOrd + Clone,
     B: BranchingOperator + BoundingOperator<V>,
     S: NodeSequencer<BoundedSolution<V, B>>,
     M: MinOrMax,
@@ -254,7 +266,7 @@ where
 
 impl<V, B> BranchAndBound<V, B, Stack<BoundedSolution<V, B>>, BBMin>
 where
-    V: PartialOrd + PartialEq + Clone,
+    V: PartialOrd + Clone,
     B: BranchingOperator + BoundingOperator<V> + Clone,
 {
     /// Creates a new [`BranchAndBound`] instance using a starting node, i.e. the set of all solutions.
@@ -273,7 +285,7 @@ where
 
 impl<V, B, S, M> BranchAndBound<V, B, S, M>
 where
-    V: PartialOrd + PartialEq + Clone,
+    V: PartialOrd + Clone,
     B: BranchingOperator + BoundingOperator<V>,
     S: NodeSequencer<BoundedSolution<V, B>>,
     M: MinOrMax,
@@ -354,7 +366,7 @@ where
 
 impl<V, B, S> BranchAndBound<V, B, S, BBMin>
 where
-    V: PartialOrd + PartialEq + Clone,
+    V: PartialOrd + Clone,
     B: BranchingOperator + BoundingOperator<V>,
     S: NodeSequencer<BoundedSolution<V, B>>,
 {
@@ -374,7 +386,7 @@ where
 
 impl<V, B, S> BranchAndBound<V, B, S, BBMax>
 where
-    V: PartialOrd + PartialEq + Clone,
+    V: PartialOrd + Clone,
     B: BranchingOperator + BoundingOperator<V>,
     S: NodeSequencer<BoundedSolution<V, B>>,
 {
@@ -409,12 +421,10 @@ pub trait IterativeAlgorithm {
     fn best_known_solution(&self) -> Option<&Self::Solution>;
 
     /// Runs the algorithm until it is completed, i.e. when `self.is_completed()` yields *true*.
-    /// Returns the best solution found in the process or `None` if none was found.
-    fn run_to_completion(&mut self) -> Option<&Self::Solution> {
+    fn run_to_completion(&mut self) {
         while !self.is_completed() {
             self.execute_step();
         }
-        self.best_known_solution()
     }
 
     /// Returns the current number of iterations performed by the algorithm.
@@ -423,7 +433,7 @@ pub trait IterativeAlgorithm {
 
 impl<V, B, S, M> IterativeAlgorithm for BranchAndBound<V, B, S, M>
 where
-    V: PartialOrd + PartialEq + Clone,
+    V: PartialOrd + Clone,
     B: BranchingOperator + BoundingOperator<V>,
     S: NodeSequencer<BoundedSolution<V, B>>,
     M: MinOrMax,

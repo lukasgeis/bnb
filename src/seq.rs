@@ -225,7 +225,7 @@ where
 /// for easier handling in [`PrioQueue`] and [`RevPrioQueue`].
 pub struct BoundedSolution<V, B>
 where
-    V: PartialOrd + PartialEq + Clone,
+    V: PartialOrd + Clone,
     B: BranchingOperator + BoundingOperator<V>,
 {
     /// Bound of the solution.
@@ -237,24 +237,24 @@ where
 
 impl<V, B> PartialEq for BoundedSolution<V, B>
 where
-    V: PartialOrd + PartialEq + Clone,
+    V: PartialOrd + Clone,
     B: BranchingOperator + BoundingOperator<V>,
 {
     fn eq(&self, other: &Self) -> bool {
-        self.bound == other.bound
+        self.partial_cmp(&other) == Some(Ordering::Equal)
     }
 }
 
 impl<V, B> Eq for BoundedSolution<V, B>
 where
-    V: PartialOrd + PartialEq + Clone,
+    V: PartialOrd + Clone,
     B: BranchingOperator + BoundingOperator<V>,
 {
 }
 
 impl<V, B> PartialOrd for BoundedSolution<V, B>
 where
-    V: PartialOrd + PartialEq + Clone,
+    V: PartialOrd + Clone,
     B: BranchingOperator + BoundingOperator<V>,
 {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
@@ -264,7 +264,7 @@ where
 
 impl<V, B> Ord for BoundedSolution<V, B>
 where
-    V: PartialOrd + PartialEq + Clone,
+    V: PartialOrd + Clone,
     B: BranchingOperator + BoundingOperator<V>,
 {
     fn cmp(&self, other: &Self) -> Ordering {
@@ -277,7 +277,7 @@ where
 
 impl<V, B> BoundedSolution<V, B>
 where
-    V: PartialOrd + PartialEq + Clone,
+    V: PartialOrd + Clone,
     B: BranchingOperator + BoundingOperator<V>,
 {
     /// Creates a new [`BoundedSolution`] using a given bound and a given solution.
