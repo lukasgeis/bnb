@@ -14,7 +14,7 @@
 //! Furthermore that this example is highly unoptimized.
 //!
 //! ```
-//! use bnb::{BranchingOperator, BoundingOperator, BranchAndBound, IterativeAlgorithm};
+//! use bnb::{BranchingOperator, BoundingOperator, BranchAndBound};
 //!
 //! #[derive(Clone, Debug)]
 //! struct KnapsackInstance {
@@ -121,39 +121,39 @@
 //!     }
 //! }
 //!
-//! fn main() {
-//!     let ins: KnapsackInstance = KnapsackInstance {
-//!         num_items: 8,
-//!         weights: vec![0.1, 0.4, 0.3, 0.7, 0.9, 0.2, 0.5, 0.6],
-//!         values: vec![2.0, 3.1, 2.4, 0.9, 5.1, 0.8, 0.2, 4.0],
-//!         weight_limit: 1.7,
-//!     };
 //!
-//!     // Run Branch & Bound using DFS
-//!     let mut bnb = BranchAndBound::new(KnapsackSolution::new(&ins))
-//!                     .maximize()
-//!                     .use_dfs();
+//! let ins: KnapsackInstance = KnapsackInstance {
+//!     num_items: 8,
+//!     weights: vec![0.1, 0.4, 0.3, 0.7, 0.9, 0.2, 0.5, 0.6],
+//!     values: vec![2.0, 3.1, 2.4, 0.9, 5.1, 0.8, 0.2, 4.0],
+//!     weight_limit: 1.7,
+//! };
+//!
+//! // Run Branch & Bound using DFS
+//! let mut bnb = BranchAndBound::new(KnapsackSolution::new(&ins))
+//!                 .maximize()
+//!                 .use_dfs();
 //!     
-//!     // Run the algorithm
-//!     bnb.run_to_completion();
+//! // Run the algorithm
+//! bnb.run_to_completion();
 //!
-//!     // The solution should exist
-//!     let sol = bnb.best_known_solution().unwrap();
+//! // The solution should exist
+//! let sol = bnb.best_known_solution().unwrap();
 //!
-//!     // Optimal value achieved us 12.3
-//!     assert_eq!(sol.0, 12.3);
+//! // Optimal value achieved us 12.3
+//! assert_eq!(sol.0, 12.3);
 //!
-//!     // Items 1,2,3,6,8 were chosen
-//!     assert_eq!(sol.1.chosen, vec![true, true, true, false, false, true, false, true]);
-//!     assert_eq!(sol.1.index, 8);
+//! // Items 1,2,3,6,8 were chosen
+//! assert_eq!(sol.1.chosen, vec![true, true, true, false, false, true, false, true]);
+//! assert_eq!(sol.1.index, 8);
 //!
-//!     // The total weight of chosen items is 1.6
-//!     assert_eq!(sol.1.total_weight, 1.6);
+//! // The total weight of chosen items is 1.6
+//! assert_eq!(sol.1.total_weight, 1.6);
 //!
-//!     // The algorithm took 21 iterations (77 for BestFirstSearch and 125 for BFS in this instance)
-//!     assert_eq!(bnb.num_iterations(), 21);
+//! // The algorithm took 21 iterations (77 for BestFirstSearch and 125 for BFS in this instance)
+//! assert_eq!(bnb.num_iterations(), 21);
 //!
-//! }
+//!
 //!
 //! ```
 
@@ -404,43 +404,15 @@ where
     }
 }
 
-/// Trait defining an iterative algorithm to allow step for step execution of the [`BranchAndBound`] algorithm.
-pub trait IterativeAlgorithm {
-    /// The type of solution, the algorithm will return.
-    type Solution;
-
-    /// Executes the next step in the computation.
-    ///
-    /// Might panic if `self.is_completed()` yields *true*.
-    fn execute_step(&mut self);
-
-    /// Returns *true* if the execution is finished and the best solution was found.
-    fn is_completed(&self) -> bool;
-
-    /// Returns the currently best known solution at any point in the computation (might be `None` if there was no found yet).
-    fn best_known_solution(&self) -> Option<&Self::Solution>;
-
-    /// Runs the algorithm until it is completed, i.e. when `self.is_completed()` yields *true*.
-    fn run_to_completion(&mut self) {
-        while !self.is_completed() {
-            self.execute_step();
-        }
-    }
-
-    /// Returns the current number of iterations performed by the algorithm.
-    fn num_iterations(&self) -> usize;
-}
-
-impl<V, B, S, M> IterativeAlgorithm for BranchAndBound<V, B, S, M>
+impl<V, B, S, M> BranchAndBound<V, B, S, M>
 where
     V: PartialOrd + Clone,
     B: BranchingOperator + BoundingOperator<V>,
     S: NodeSequencer<BoundedSolution<V, B>>,
     M: MinOrMax,
 {
-    type Solution = (V, B);
-
-    fn execute_step(&mut self) {
+    /// Executes the next step in the computation.
+    pub fn execute_step(&mut self) {
         self.iterations += 1;
         // If there is a (next) node in the sequencer that has a better theoretical bound than the currently best known solution (if existing), then...
         if let Some(node) = self.node_sequencer.pop_until_satisfied(|node| {
@@ -484,18 +456,28 @@ where
         }
     }
 
-    fn is_completed(&self) -> bool {
+    /// Returns *true* if the execution is finished and the best solution was found.
+    pub fn is_completed(&self) -> bool {
         self.node_sequencer.len() == 0
     }
 
-    fn best_known_solution(&self) -> Option<&Self::Solution> {
+    /// Runs the algorithm until it is completed, i.e. when `self.is_completed()` yields *true*.
+    pub fn run_to_completion(&mut self) {
+        while !self.is_completed() {
+            self.execute_step();
+        }
+    }
+
+    /// Returns the currently best known solution at any point in the computation (might be `None` if there was no found yet).
+    pub fn best_known_solution(&self) -> Option<&(V, B)> {
         if let Some(sol) = self.current_best_bound.as_ref() {
             return Some(sol);
         }
         None
     }
 
-    fn num_iterations(&self) -> usize {
+    /// Returns the current number of iterations performed by the algorithm.
+    pub fn num_iterations(&self) -> usize {
         self.iterations
     }
 }

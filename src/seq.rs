@@ -35,6 +35,11 @@ pub trait NodeSequencer<T>: Sized {
     /// Returns the number of elements in the sequencer.
     fn len(&self) -> usize;
 
+    /// Returns *true* if the length is zero
+    fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
     /// Consumes the sequencer and returns a `Vec<T>` with all remaining objects in the sequencer.
     fn to_vec(self) -> Vec<T>;
 
@@ -241,7 +246,7 @@ where
     B: BranchingOperator + BoundingOperator<V>,
 {
     fn eq(&self, other: &Self) -> bool {
-        self.partial_cmp(&other) == Some(Ordering::Equal)
+        self.partial_cmp(other) == Some(Ordering::Equal)
     }
 }
 
@@ -258,7 +263,7 @@ where
     B: BranchingOperator + BoundingOperator<V>,
 {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        self.bound.partial_cmp(&other.bound)
+        Some(self.cmp(other))
     }
 }
 
@@ -268,7 +273,7 @@ where
     B: BranchingOperator + BoundingOperator<V>,
 {
     fn cmp(&self, other: &Self) -> Ordering {
-        match self.partial_cmp(&other) {
+        match self.bound.partial_cmp(&other.bound) {
             Some(ordering) => ordering,
             None => Ordering::Equal,
         }
@@ -283,7 +288,7 @@ where
     /// Creates a new [`BoundedSolution`] using a given bound and a given solution.
     pub fn new(bound: V, node: B) -> Self {
         Self {
-            bound: bound,
+            bound,
             solution: node,
         }
     }

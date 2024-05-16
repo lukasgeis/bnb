@@ -38,10 +38,10 @@ impl BoundingOperator<u32> for YourStruct {
 }
 ```
 
-Afterwards, import the `BranchAndBound` struct and the `IterativeAlgorithm` trait and initialize the `BranchAndBound` struct using a starting state version of `YourStruct`:
+Afterwards, import and initialize the `BranchAndBound` struct using a starting state version of `YourStruct`:
 
 ```rust
-use bnb::{BranchingOperator, BoundingOperator, BranchAndBound, IterativeAlgorithm};
+use bnb::{BranchingOperator, BoundingOperator, BranchAndBound};
 
 struct YourStruct { ... }
 
